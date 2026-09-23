@@ -1,0 +1,4 @@
+[
+  {"id": "A", "arrival_s": 0.0, "input_len": 128, "output_len": 256},
+  {"id": "B", "arrival_s": 0.5, "input_len": 4096, "output_len": 64}
+]
