@@ -13,6 +13,13 @@ class Scheduler:
         self.eos = config.eos
         self.block_size = config.kvcache_block_size
         self.scheduling_policy = config.scheduling_policy
+        self.kv_allocation = getattr(config, "kv_allocation", "full")
+        self.max_model_len = getattr(config, "max_model_len", None)
+        self.observe_kv = getattr(config, "observe_kv", False)
+        self.preemptions = 0
+        self.evicted_cached_tokens = 0
+        self.recomputed_tokens = 0
+        self._computed_high_water = {}
         self._last_was_prefill = False
         self.block_manager = BlockManager(config.num_kvcache_blocks, config.kvcache_block_size)
         self.waiting: deque[Sequence] = deque()
@@ -22,9 +29,19 @@ class Scheduler:
         return not self.waiting and not self.running
 
     def add(self, seq: Sequence):
+        if self.kv_allocation == "on_demand":
+            # Conservative admission: even without sharing, one request must
+            # fit through its final forward. The final sampled token has no KV.
+            final_tokens = seq.num_prompt_tokens + seq.max_tokens - 1
+            if seq.max_tokens <= 0 or final_tokens > len(self.block_manager.blocks) * self.block_size:
+                raise ValueError("request cannot finish within the KV pool at its output limit")
+            if self.max_model_len is not None and final_tokens + 1 > self.max_model_len:
+                raise ValueError("prompt plus output limit exceeds max_model_len")
         self.waiting.append(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:
+        if self.kv_allocation == "on_demand":
+            return self.schedule_on_demand()
         if self.scheduling_policy == "mixed":
             return self.schedule_mixed()
         scheduled_seqs = []
@@ -154,16 +171,123 @@ class Scheduler:
         self._last_was_prefill = bool(prefills)
         return selected, bool(prefills)
 
+    def schedule_on_demand(self) -> tuple[list[Sequence], bool]:
+        """Mixed scheduling with incremental blocks and bounded partial admission.
+
+        At most one unfinished prefill holds blocks. Ordinary capacity failures
+        defer that request; they never evict a selected request. If no query can
+        run, reclaim younger owners and run the oldest request alone. That oldest
+        request cannot be evicted by recovery, ensuring finite-work progress
+        for admitted requests (not a latency/fairness guarantee under overload).
+        """
+        selected, prefills = [], []
+        remaining = self.max_num_batched_tokens
+        reserve = int(bool(self.waiting and self.running and not self._last_was_prefill))
+        manager = self.block_manager
+
+        def decodes(slots, reserved_tokens):
+            nonlocal remaining
+            for seq in list(self.running):
+                if len(selected) >= slots or remaining <= reserved_tokens:
+                    break
+                if seq in selected:
+                    continue
+                if not manager.allocate_chunk(seq, 1):
+                    continue
+                seq.is_prefill = False
+                seq.num_scheduled_tokens = 1
+                selected.append(seq)
+                remaining -= 1
+
+        decodes(self.max_num_seqs - reserve, reserve)
+        while self.waiting and remaining and len(selected) < self.max_num_seqs:
+            seq = self.waiting[0]
+            query = manager.allocate_chunk(seq, remaining)
+            if not query:
+                break
+            seq.is_prefill = True
+            seq.num_scheduled_tokens = query
+            remaining -= query
+            selected.append(seq); prefills.append(seq)
+            if seq.num_cached_tokens + query == len(seq):
+                self.waiting.popleft()
+                seq.status = SequenceStatus.RUNNING
+            else:
+                break
+        if not prefills and reserve:
+            decodes(self.max_num_seqs, 0)
+        if not selected:
+            owners = list(self.running) + list(self.waiting)
+            if not owners:
+                raise RuntimeError("cannot schedule an empty queue")
+            oldest = min(owners, key=lambda s: s.seq_id)
+            oldest.is_prefill = oldest.status == SequenceStatus.WAITING
+            budget = self.max_num_batched_tokens if oldest.is_prefill else 1
+            query = manager.allocate_chunk(oldest, budget)
+            for victim in sorted(owners, key=lambda s: s.seq_id, reverse=True):
+                if query:
+                    break
+                if victim is oldest or not victim.block_table:
+                    continue
+                if victim in self.running:
+                    self.running.remove(victim)
+                else:
+                    self.waiting.remove(victim)
+                self.preempt(victim)
+                query = manager.allocate_chunk(oldest, budget)
+            if not query:
+                raise RuntimeError("KV recovery failed despite single-request capacity validation")
+            oldest.num_scheduled_tokens = query
+            selected = [oldest]
+            if oldest.is_prefill:
+                prefills = [oldest]
+                self.waiting.remove(oldest)
+                if oldest.num_cached_tokens + query == len(oldest):
+                    oldest.status = SequenceStatus.RUNNING
+                else:
+                    self.waiting.appendleft(oldest)
+        # Rotate only selected running requests. New completed prefills were
+        # never eligible for decode in this step.
+        for seq in selected:
+            if seq in self.running:
+                self.running.remove(seq)
+            if seq.status == SequenceStatus.RUNNING:
+                self.running.append(seq)
+        self._last_was_prefill = bool(prefills)
+        return selected, bool(prefills)
+
+    def kv_snapshot(self):
+        """Physical pool occupancy before forward, not nvidia-smi allocation."""
+        written = set()
+        for seq in list(self.running) + list(self.waiting):
+            written.update(seq.block_table[:(seq.num_cached_tokens + self.block_size - 1) // self.block_size])
+        return {
+            "allocated_blocks_before_forward": len(self.block_manager.used_block_ids),
+            "unwritten_blocks_before_forward": len(self.block_manager.used_block_ids - written),
+            "preemptions_total": self.preemptions,
+            "evicted_cached_tokens_total": self.evicted_cached_tokens,
+            "recomputed_tokens_total": self.recomputed_tokens,
+        }
+
     def preempt(self, seq: Sequence):
+        self.preemptions += 1
+        self.evicted_cached_tokens += seq.num_cached_tokens
         seq.status = SequenceStatus.WAITING
         seq.is_prefill = True
         self.block_manager.deallocate(seq)
-        self.waiting.appendleft(seq)
+        if self.kv_allocation == "on_demand":
+            self.waiting.append(seq)  # do not strand an existing partial prefill
+        else:
+            self.waiting.appendleft(seq)
 
     def postprocess(self, seqs: list[Sequence], token_ids: list[int | None], is_prefill: bool):
         if len(seqs) != len(token_ids):
             raise ValueError("runner output must preserve one entry per scheduled request")
         for seq, token_id in zip(seqs, token_ids):
+            high = self._computed_high_water.get(seq.seq_id, 0)
+            end = seq.num_cached_tokens + seq.num_scheduled_tokens
+            self.recomputed_tokens += max(0, min(high, end) - seq.num_cached_tokens)
+            self._computed_high_water[seq.seq_id] = max(high, end)
             self.block_manager.hash_blocks(seq)
             seq.num_cached_tokens += seq.num_scheduled_tokens
             seq.num_scheduled_tokens = 0
@@ -176,3 +300,4 @@ class Scheduler:
                 seq.status = SequenceStatus.FINISHED
                 self.block_manager.deallocate(seq)
                 self.running.remove(seq)
+                self._computed_high_water.pop(seq.seq_id, None)

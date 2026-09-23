@@ -185,6 +185,10 @@ def parse_args(argv=None):
     parser.add_argument("--only-request", help="Run one request from the same full trace as a control")
     parser.add_argument("--execution", choices=("eager", "graph"), default="graph")
     parser.add_argument("--scheduling-policy", choices=("prefill_first", "interleave", "mixed"), default="prefill_first")
+    parser.add_argument("--kv-allocation", choices=("full", "on_demand"), default="full")
+    parser.add_argument("--kv-cache-blocks", type=int)
+    parser.add_argument("--allow-kv-pressure", action="store_true")
+    parser.add_argument("--observe-kv", action="store_true")
     parser.add_argument("--max-num-seqs", type=int, default=2)
     parser.add_argument("--max-num-batched-tokens", type=int, default=512)
     parser.add_argument("--max-model-len", type=int, default=4352)
@@ -195,6 +199,10 @@ def parse_args(argv=None):
     parser.add_argument("--timeout-s", type=float, default=120)
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args(argv)
+    if args.kv_allocation == "on_demand" and args.scheduling_policy != "mixed":
+        parser.error("on_demand requires --scheduling-policy mixed")
+    if args.kv_cache_blocks is not None and args.kv_cache_blocks <= 0:
+        parser.error("kv-cache-blocks must be positive")
     for name in ("max_num_seqs", "max_num_batched_tokens", "max_model_len", "warmup", "repeats"):
         if getattr(args, name) <= 0:
             parser.error(f"{name} must be positive")
@@ -269,15 +277,19 @@ def run(args, directory, metadata):
     engine = LLM(str(args.model), tensor_parallel_size=1, enforce_eager=args.execution == "eager",
                  max_num_seqs=args.max_num_seqs, max_num_batched_tokens=args.max_num_batched_tokens,
                  max_model_len=args.max_model_len, gpu_memory_utilization=args.gpu_memory_utilization,
-                 scheduling_policy=args.scheduling_policy)
+                 scheduling_policy=args.scheduling_policy, kv_allocation=args.kv_allocation,
+                 kv_cache_blocks=args.kv_cache_blocks, observe_kv=args.observe_kv)
     torch.cuda.synchronize()
     metadata["engine_init_seconds"] = time.perf_counter() - start
     metadata["effective_scheduling_policy"] = engine.scheduler.scheduling_policy
+    metadata["effective_kv_allocation"] = engine.scheduler.kv_allocation
     manager = engine.scheduler.block_manager
     metadata["kv_pool"] = {"num_blocks": len(manager.blocks), "block_size": manager.block_size}
     write_json(directory / "metadata.json", metadata)
     needed = sum(required_blocks(1, r["input_len"], r["output_len"], manager.block_size) for r in workload)
-    if needed > len(manager.blocks):
+    if any((r["input_len"] + r["output_len"] - 2) // manager.block_size + 1 > len(manager.blocks) for r in workload):
+        raise ValueError("a single request cannot finish within the KV pool")
+    if needed > len(manager.blocks) and not args.allow_kv_pressure:
         raise ValueError(f"need {needed} blocks for conservative no-pressure replay, only {len(manager.blocks)} available")
     rounds = []
     for i in range(args.warmup + args.repeats):
@@ -290,6 +302,14 @@ def run(args, directory, metadata):
         result = replay(engine, workload, lambda n: SamplingParams(temperature=0.6, ignore_eos=True, max_tokens=n),
                         timeout_s=args.timeout_s)
         result.update(phase=phase, round=number)
+        if args.observe_kv:
+            result["kv_metrics"] = {
+                "peak_allocated_blocks": max(s["allocated_blocks_before_forward"] for s in result["steps"]),
+                "peak_unwritten_blocks": max(s["unwritten_blocks_before_forward"] for s in result["steps"]),
+                "preemptions": engine.scheduler.preemptions,
+                "evicted_cached_tokens": engine.scheduler.evicted_cached_tokens,
+                "recomputed_tokens": engine.scheduler.recomputed_tokens,
+            }
         rounds.append(result)
         round_dir = directory / f"{phase}-{number:02d}"
         round_dir.mkdir()
@@ -315,7 +335,7 @@ def main(argv=None):
     directory.mkdir(parents=True, exist_ok=False)
     root = Path(__file__).resolve().parent
     metadata = {
-        "status": "running", "schema_version": 2, "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "status": "running", "schema_version": 3, "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "arguments": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
         "python": sys.version, "executable": sys.executable, "command": sys.argv,
         "git_commit": command_output(["git", "rev-parse", "HEAD"], root),
@@ -325,7 +345,7 @@ def main(argv=None):
         "sampling": {"temperature": 0.6, "ignore_eos": True},
         "clock_semantics": "perf_counter relative to round start; fixed planned arrivals, actual admission only between steps; outputs observed at step return (upper bound on CPU availability)",
         "timing_scope": "step wall time includes schedule/runner/postprocess, NOT pure GPU; no extra per-step CUDA sync; original runner returns CPU token IDs; no text detokenization",
-        "limitations": "synthetic workload, no server/network; observer overhead included; no p95/p99 inference from few requests; no KV pressure; warmup may not cover all arrival-dependent batch shapes; phase uses explicit engine counters with signed-token fallback for older engines; mixed policy also skips discarded partial-prefill sampling",
+        "limitations": "synthetic workload, no server/network; observer overhead included; no p95/p99 inference from few requests; KV pressure only when explicitly enabled; warmup may not cover all arrival-dependent batch shapes; mixed policy also skips discarded partial-prefill sampling; on_demand includes conservative admission and oldest-request recovery",
     }
     for name in ("bench_timeline.py", "bench_baseline.py"):
         (directory / name).write_bytes((root / name).read_bytes())

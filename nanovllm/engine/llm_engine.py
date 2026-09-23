@@ -54,11 +54,15 @@ class LLMEngine:
             "phase": "mixed" if prefill_tokens and decode_tokens else "prefill" if prefill_tokens else "decode",
             "prefill_tokens": prefill_tokens, "decode_tokens": decode_tokens,
         }
+        if getattr(self.scheduler, "observe_kv", False):
+            self.last_step_stats.update(self.scheduler.kv_snapshot())
         # Preserve the legacy signed count for callers; phase-aware observers
         # must use last_step_stats because a positive count can now be mixed.
         num_tokens = sum(seq.num_scheduled_tokens for seq in seqs) if is_prefill else -len(seqs)
         token_ids = self.model_runner.call("run", seqs, is_prefill)
         self.scheduler.postprocess(seqs, token_ids, is_prefill)
+        if getattr(self.scheduler, "observe_kv", False):
+            self.last_step_stats["recomputed_tokens_total"] = self.scheduler.recomputed_tokens
         outputs = [(seq.seq_id, seq.completion_token_ids) for seq in seqs if seq.is_finished]
         return outputs, num_tokens
 

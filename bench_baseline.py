@@ -108,6 +108,13 @@ def reset_prefix_cache(engine):
     check_idle(engine)
     old = engine.scheduler.block_manager
     engine.scheduler.block_manager = type(old)(len(old.blocks), old.block_size)
+    for name in ("preemptions", "evicted_cached_tokens", "recomputed_tokens"):
+        if hasattr(engine.scheduler, name):
+            setattr(engine.scheduler, name, 0)
+    if hasattr(engine.scheduler, "_computed_high_water"):
+        engine.scheduler._computed_high_water.clear()
+    if hasattr(engine.scheduler, "_last_was_prefill"):
+        engine.scheduler._last_was_prefill = False
 
 
 def required_blocks(num_requests, input_len, output_len, block_size):

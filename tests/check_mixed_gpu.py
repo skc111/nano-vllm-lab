@@ -31,7 +31,12 @@ def main():
     p.add_argument('--output-dir', required=True, type=Path)
     p.add_argument('--gpu-memory-utilization', type=float, default=.85)
     p.add_argument('--execution', choices=('graph','eager'), default='graph')
+    p.add_argument('--kv-allocation', choices=('full','on_demand'), default='full')
+    p.add_argument('--kv-cache-blocks', type=int)
+    p.add_argument('--check-kv-pressure', action='store_true')
     args = p.parse_args()
+    if args.check_kv_pressure and (args.kv_allocation != 'on_demand' or args.kv_cache_blocks != 3):
+        p.error('pressure fixture requires on_demand and exactly 3 KV blocks')
     args.output_dir.mkdir(parents=True, exist_ok=False)
     report = {'status':'running', 'scope':__doc__, 'arguments':vars(args).copy(),
               'attention_rtol':.025, 'attention_atol':.025, 'events':[]}
@@ -57,8 +62,9 @@ def main():
         (args.output_dir/'check_mixed_gpu.py').write_bytes(Path(__file__).read_bytes())
         engine = LLM(str(args.model), scheduling_policy='mixed', tensor_parallel_size=1,
                      enforce_eager=args.execution=='eager', max_num_seqs=2,
-                     max_num_batched_tokens=128, max_model_len=512,
-                     gpu_memory_utilization=args.gpu_memory_utilization)
+                     max_num_batched_tokens=128, max_model_len=768 if args.check_kv_pressure else 512,
+                     gpu_memory_utilization=args.gpu_memory_utilization,
+                     kv_allocation=args.kv_allocation, kv_cache_blocks=args.kv_cache_blocks)
         runner = engine.model_runner
         report['kv_pool_blocks'] = len(engine.scheduler.block_manager.blocks)
         report['attention_checks'] = 0
@@ -151,6 +157,25 @@ def main():
         assert any(e['phase']=='mixed' for e in report['events'])
         assert any(e['output_rows']==0 for e in report['events'])
         assert any(e['phase']=='decode' for e in report['events'])
+        if args.check_kv_pressure:
+            from bench_baseline import reset_prefix_cache
+            reset_prefix_cache(engine)
+            d = add('D', [109+i%17 for i in range(511)], 4)
+            for _ in range(10):
+                if d.num_completion_tokens: break
+                engine.step()
+            assert d.num_completion_tokens == 1
+            e = add('E', [151+i%19 for i in range(257)], 2)
+            for _ in range(40):
+                if engine.is_finished(): break
+                engine.step()
+            check_idle(engine)
+            assert (d.num_completion_tokens,e.num_completion_tokens)==(4,2)
+            assert engine.scheduler.preemptions > 0, 'pressure fixture did not exercise eviction'
+            assert engine.scheduler.recomputed_tokens > 0, 'pressure fixture did not exercise recomputation'
+            report['pressure'] = {'preemptions':engine.scheduler.preemptions,
+                                  'evicted_cached_tokens':engine.scheduler.evicted_cached_tokens,
+                                  'recomputed_tokens':engine.scheduler.recomputed_tokens}
         report['status']='complete'
         save()
         print(f"PASS: mixed one-forward, output alignment, prefix reuse, KV writes, {report['attention_checks']} FP32 attention comparisons; max abs error={report['attention_max_abs_error']}")

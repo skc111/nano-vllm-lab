@@ -17,8 +17,17 @@ class Config:
     kvcache_block_size: int = 256
     num_kvcache_blocks: int = -1
     scheduling_policy: str = "prefill_first"
+    kv_allocation: str = "full"
+    kv_cache_blocks: int | None = None  # optional fixed pool for capacity experiments
+    observe_kv: bool = False
 
     def __post_init__(self):
+        if self.kv_allocation not in ("full", "on_demand"):
+            raise ValueError("kv_allocation must be 'full' or 'on_demand'")
+        if self.kv_allocation == "on_demand" and (self.scheduling_policy != "mixed" or self.tensor_parallel_size != 1):
+            raise ValueError("on_demand currently requires mixed scheduling on one GPU")
+        if self.kv_cache_blocks is not None and (type(self.kv_cache_blocks) is not int or self.kv_cache_blocks <= 0):
+            raise ValueError("kv_cache_blocks must be a positive integer")
         if self.scheduling_policy not in ("prefill_first", "interleave", "mixed"):
             raise ValueError("scheduling_policy must be 'prefill_first', 'interleave' or 'mixed'")
         if self.scheduling_policy == "mixed" and self.tensor_parallel_size != 1:

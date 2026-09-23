@@ -72,8 +72,10 @@ class BlockManager:
             return -1
         return num_cached_blocks
 
-    def allocate(self, seq: Sequence, num_cached_blocks: int):
+    def allocate(self, seq: Sequence, num_cached_blocks: int, end_token: int | None = None):
         assert not seq.block_table
+        num_blocks = seq.num_blocks if end_token is None else (end_token + self.block_size - 1) // self.block_size
+        assert num_cached_blocks <= num_blocks <= seq.num_blocks
         h = -1
         for i in range(num_cached_blocks):
             token_ids = seq.block(i)
@@ -87,9 +89,48 @@ class BlockManager:
                 self.free_block_ids.remove(block_id)
                 self.used_block_ids.add(block_id)
             seq.block_table.append(block_id)
-        for i in range(num_cached_blocks, seq.num_blocks):
+        for i in range(num_cached_blocks, num_blocks):
             seq.block_table.append(self._allocate_block())
         seq.num_cached_tokens = num_cached_blocks * self.block_size
+
+    def prefix_blocks(self, seq: Sequence) -> list[int]:
+        """Read-only prefix lookup, leaving at least one query token to compute."""
+        found, h = [], -1
+        for i in range(seq.num_blocks - 1):
+            tokens = seq.block(i)
+            h = self.compute_hash(tokens, h)
+            block_id = self.hash_to_block_id.get(h, -1)
+            if block_id < 0 or self.blocks[block_id].token_ids != tokens:
+                break
+            found.append(block_id)
+        return found
+
+    def chunk_plan(self, seq: Sequence, budget: int) -> tuple[int, int, int]:
+        """Return cached-prefix block count, query length and required free blocks.
+
+        No side effects on failure. Free cached hits must be claimed BEFORE
+        new allocations can evict them. Used hits require no extra free block.
+        """
+        assert budget > 0
+        prefix = [] if seq.block_table else self.prefix_blocks(seq)
+        cached = seq.num_cached_tokens if seq.block_table else len(prefix) * self.block_size
+        query = min(len(seq) - cached, budget)
+        assert query > 0
+        target = (cached + query + self.block_size - 1) // self.block_size
+        needed = (target - len(seq.block_table) if seq.block_table else
+                  target - sum(self.blocks[b].ref_count > 0 for b in prefix))
+        return len(prefix), query, needed
+
+    def allocate_chunk(self, seq: Sequence, budget: int) -> int:
+        prefix, query, needed = self.chunk_plan(seq, budget)
+        if needed > len(self.free_block_ids):
+            return 0
+        if not seq.block_table:
+            self.allocate(seq, prefix, prefix * self.block_size + query)
+        else:
+            for _ in range(needed):
+                seq.block_table.append(self._allocate_block())
+        return query
 
     def deallocate(self, seq: Sequence):
         for block_id in reversed(seq.block_table):
