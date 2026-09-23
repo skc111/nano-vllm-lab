@@ -200,3 +200,6 @@ cython_debug/
 /NANOVLLM_TEACHING_SCRIPT.md
 /OPTIMIZATION_NOTES.md
 /VLLM_V1_DEEP_DIVE.md
+
+# Local benchmark artifacts (copy important runs out before releasing cloud disks)
+/results/
