@@ -16,8 +16,11 @@ class Config:
     eos: int = -1
     kvcache_block_size: int = 256
     num_kvcache_blocks: int = -1
+    scheduling_policy: str = "prefill_first"
 
     def __post_init__(self):
+        if self.scheduling_policy not in ("prefill_first", "interleave"):
+            raise ValueError("scheduling_policy must be 'prefill_first' or 'interleave'")
         assert os.path.isdir(self.model)
         assert self.kvcache_block_size % 256 == 0
         assert 1 <= self.tensor_parallel_size <= 8

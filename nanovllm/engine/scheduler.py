@@ -12,6 +12,8 @@ class Scheduler:
         self.max_num_batched_tokens = config.max_num_batched_tokens
         self.eos = config.eos
         self.block_size = config.kvcache_block_size
+        self.scheduling_policy = config.scheduling_policy
+        self._last_was_prefill = False
         self.block_manager = BlockManager(config.num_kvcache_blocks, config.kvcache_block_size)
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
@@ -26,8 +28,19 @@ class Scheduler:
         scheduled_seqs = []
         num_batched_tokens = 0
 
+        # Interleave whole steps; this is NOT a mixed prefill/decode forward.
+        # Require the first decode to make progress without preemption. Otherwise
+        # a partial prefill holding blocks could be stranded behind a requeued
+        # decode request when a forced decode produces an empty batch.
+        yield_to_decode = (
+            self.scheduling_policy == "interleave"
+            and self._last_was_prefill
+            and bool(self.running)
+            and self.block_manager.can_append(self.running[0])
+        )
+
         # prefill
-        while self.waiting and len(scheduled_seqs) < self.max_num_seqs:
+        while self.waiting and not yield_to_decode and len(scheduled_seqs) < self.max_num_seqs:
             seq = self.waiting[0]
             remaining = self.max_num_batched_tokens - num_batched_tokens
             if remaining == 0:
@@ -52,6 +65,7 @@ class Scheduler:
             scheduled_seqs.append(seq)
 
         if scheduled_seqs:
+            self._last_was_prefill = True
             return scheduled_seqs, True
 
         # decode
@@ -70,6 +84,7 @@ class Scheduler:
                 scheduled_seqs.append(seq)
         assert scheduled_seqs
         self.running.extendleft(reversed(scheduled_seqs))
+        self._last_was_prefill = False
         return scheduled_seqs, False
 
     def preempt(self, seq: Sequence):

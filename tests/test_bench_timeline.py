@@ -209,8 +209,11 @@ class TimelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "config.json").write_text("{}")
             self.assertEqual(parse_args(["--model", directory]).execution, "graph")
+            self.assertEqual(parse_args(["--model", directory]).scheduling_policy, "prefill_first")
+            self.assertEqual(parse_args(["--model", directory, "--scheduling-policy", "interleave"]).scheduling_policy, "interleave")
             for option, value in (("--warmup", "0"), ("--timeout-s", "nan"),
-                                  ("--max-num-seqs", "17"), ("--gpu-memory-utilization", "1")):
+                                  ("--max-num-seqs", "17"), ("--gpu-memory-utilization", "1"),
+                                  ("--scheduling-policy", "unknown")):
                 with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                     parse_args(["--model", directory, option, value])
 

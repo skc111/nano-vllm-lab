@@ -46,6 +46,9 @@ class BenchmarkTests(unittest.TestCase):
         args = self.parse()
         self.assertEqual(args.max_num_seqs, 2)
         self.assertEqual(args.execution, "eager")
+        self.assertEqual(args.scheduling_policy, "prefill_first")
+        self.assertEqual(self.parse("--scheduling-policy", "interleave").scheduling_policy, "interleave")
+        self.assert_bad_args("--scheduling-policy", "unknown")
 
     def test_positive_work_and_warmup(self):
         for option in ("--num-requests", "--input-len", "--output-len", "--warmup",

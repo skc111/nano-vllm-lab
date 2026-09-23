@@ -33,6 +33,7 @@ def parse_args(argv=None):
     parser.add_argument("--max-model-len", type=int, default=1024)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     parser.add_argument("--execution", choices=("eager", "graph"), default="eager")
+    parser.add_argument("--scheduling-policy", choices=("prefill_first", "interleave"), default="prefill_first")
     parser.add_argument("--temperature", type=float, default=0.6)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output-dir", type=Path, help="New directory; never overwrite a run")
@@ -216,9 +217,11 @@ def run(args, output_dir, metadata):
                  max_num_seqs=args.max_num_seqs,
                  max_num_batched_tokens=args.max_num_batched_tokens,
                  max_model_len=args.max_model_len,
-                 gpu_memory_utilization=args.gpu_memory_utilization)
+                 gpu_memory_utilization=args.gpu_memory_utilization,
+                 scheduling_policy=args.scheduling_policy)
     torch.cuda.synchronize()
     metadata["engine_init_seconds"] = time.perf_counter() - start
+    metadata["effective_scheduling_policy"] = engine.scheduler.scheduling_policy
     manager = engine.scheduler.block_manager
     metadata["kv_pool"] = {"num_blocks": len(manager.blocks), "block_size": manager.block_size}
     write_json(output_dir / "metadata.json", metadata)

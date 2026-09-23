@@ -178,6 +178,7 @@ def parse_args(argv=None):
     parser.add_argument("--trace", type=Path, default=Path(__file__).parent / "benchmarks/traces/prefill_interrupt.json")
     parser.add_argument("--only-request", help="Run one request from the same full trace as a control")
     parser.add_argument("--execution", choices=("eager", "graph"), default="graph")
+    parser.add_argument("--scheduling-policy", choices=("prefill_first", "interleave"), default="prefill_first")
     parser.add_argument("--max-num-seqs", type=int, default=2)
     parser.add_argument("--max-num-batched-tokens", type=int, default=512)
     parser.add_argument("--max-model-len", type=int, default=4352)
@@ -261,9 +262,11 @@ def run(args, directory, metadata):
     start = time.perf_counter()
     engine = LLM(str(args.model), tensor_parallel_size=1, enforce_eager=args.execution == "eager",
                  max_num_seqs=args.max_num_seqs, max_num_batched_tokens=args.max_num_batched_tokens,
-                 max_model_len=args.max_model_len, gpu_memory_utilization=args.gpu_memory_utilization)
+                 max_model_len=args.max_model_len, gpu_memory_utilization=args.gpu_memory_utilization,
+                 scheduling_policy=args.scheduling_policy)
     torch.cuda.synchronize()
     metadata["engine_init_seconds"] = time.perf_counter() - start
+    metadata["effective_scheduling_policy"] = engine.scheduler.scheduling_policy
     manager = engine.scheduler.block_manager
     metadata["kv_pool"] = {"num_blocks": len(manager.blocks), "block_size": manager.block_size}
     write_json(directory / "metadata.json", metadata)
