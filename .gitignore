@@ -193,3 +193,10 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+# Local model files and symlinks
+/models/
+
+# Local study notes
+/NANOVLLM_TEACHING_SCRIPT.md
+/OPTIMIZATION_NOTES.md
+/VLLM_V1_DEEP_DIVE.md
