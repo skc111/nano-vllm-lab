@@ -48,6 +48,14 @@ class LLMEngine:
 
     def step(self):
         seqs, is_prefill = self.scheduler.schedule()
+        prefill_tokens = sum(s.num_scheduled_tokens for s in seqs if s.is_prefill)
+        decode_tokens = sum(s.num_scheduled_tokens for s in seqs if not s.is_prefill)
+        self.last_step_stats = {
+            "phase": "mixed" if prefill_tokens and decode_tokens else "prefill" if prefill_tokens else "decode",
+            "prefill_tokens": prefill_tokens, "decode_tokens": decode_tokens,
+        }
+        # Preserve the legacy signed count for callers; phase-aware observers
+        # must use last_step_stats because a positive count can now be mixed.
         num_tokens = sum(seq.num_scheduled_tokens for seq in seqs) if is_prefill else -len(seqs)
         token_ids = self.model_runner.call("run", seqs, is_prefill)
         self.scheduler.postprocess(seqs, token_ids, is_prefill)
@@ -73,10 +81,11 @@ class LLMEngine:
         while not self.is_finished():
             t = perf_counter()
             output, num_tokens = self.step()
-            if num_tokens > 0:
-                prefill_throughput = num_tokens / (perf_counter() - t)
-            else:
-                decode_throughput = -num_tokens / (perf_counter() - t)
+            elapsed = perf_counter() - t
+            if self.last_step_stats["prefill_tokens"]:
+                prefill_throughput = self.last_step_stats["prefill_tokens"] / elapsed
+            if self.last_step_stats["decode_tokens"]:
+                decode_throughput = self.last_step_stats["decode_tokens"] / elapsed
             pbar.set_postfix({
                 "Prefill": f"{int(prefill_throughput)}tok/s",
                 "Decode": f"{int(decode_throughput)}tok/s",

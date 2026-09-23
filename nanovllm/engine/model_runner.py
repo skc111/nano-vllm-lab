@@ -211,13 +211,40 @@ class ModelRunner:
             graph.replay()
             return self.model.compute_logits(graph_vars["outputs"][:bs])
 
-    def run(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
+    def run(self, seqs: list[Sequence], is_prefill: bool) -> list[int | None]:
         input_ids, positions = self.prepare_prefill(seqs) if is_prefill else self.prepare_decode(seqs)
-        temperatures = self.prepare_sample(seqs) if self.rank == 0 else None
-        logits = self.run_model(input_ids, positions, is_prefill)
-        token_ids = self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
-        reset_context()
-        return token_ids
+        # Varlen preparation supports q_len=1 decode alongside longer prefill.
+        # Pure decode still uses the original dedicated attention / Graph path.
+        select_outputs = self.config.scheduling_policy == "mixed" and is_prefill
+        if not select_outputs:
+            try:
+                temperatures = self.prepare_sample(seqs) if self.rank == 0 else None
+                logits = self.run_model(input_ids, positions, is_prefill)
+                return self.sampler(logits, temperatures).tolist() if self.rank == 0 else None
+            finally:
+                reset_context()
+        sample_indices, last_rows, offset = [], [], 0
+        for i, seq in enumerate(seqs):
+            offset += seq.num_scheduled_tokens
+            if seq.num_cached_tokens + seq.num_scheduled_tokens == len(seq):
+                sample_indices.append(i)
+                last_rows.append(offset - 1)
+        get_context().logits_indices = torch.tensor(last_rows, dtype=torch.int64, device="cuda")
+        try:
+            sample_seqs = [seqs[i] for i in sample_indices]
+            temperatures = self.prepare_sample(sample_seqs) if self.rank == 0 and sample_seqs else None
+            logits = self.run_model(input_ids, positions, is_prefill)
+            if self.rank != 0:
+                return None
+            sampled = self.sampler(logits, temperatures).tolist() if sample_seqs else []
+            if len(sampled) != len(sample_indices):
+                raise RuntimeError("sampler output count disagrees with selected rows")
+            token_ids = [None] * len(seqs)
+            for i, token in zip(sample_indices, sampled):
+                token_ids[i] = token
+            return token_ids
+        finally:
+            reset_context()
 
     @torch.inference_mode()
     def capture_cudagraph(self):

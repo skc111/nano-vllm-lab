@@ -133,7 +133,13 @@ def replay(engine, workload, sampling_factory, *, clock=time.perf_counter,
                                "token_id": seq.last_token, "observed_s": end_s, "step": step_index})
                 emitted += 1
             state["observed"] = count
-        steps.append({"step": step_index, "phase": "prefill" if signed_tokens > 0 else "decode",
+        stats = getattr(engine, "last_step_stats", None)
+        if stats is None:  # compatibility with the original engine / test doubles
+            stats = {"phase": "prefill" if signed_tokens > 0 else "decode",
+                     "prefill_tokens": max(signed_tokens, 0), "decode_tokens": max(-signed_tokens, 0)}
+        if stats["prefill_tokens"] + stats["decode_tokens"] != abs(signed_tokens):
+            raise RuntimeError("step phase counters disagree with scheduled input count")
+        steps.append({"step": step_index, **stats,
                       "start_s": start_s, "end_s": end_s, "wall_seconds": end_s - start_s,
                       "scheduled_input_tokens": abs(signed_tokens), "new_output_tokens": emitted,
                       "waiting_before": waiting_before, "running_before": running_before,
@@ -178,7 +184,7 @@ def parse_args(argv=None):
     parser.add_argument("--trace", type=Path, default=Path(__file__).parent / "benchmarks/traces/prefill_interrupt.json")
     parser.add_argument("--only-request", help="Run one request from the same full trace as a control")
     parser.add_argument("--execution", choices=("eager", "graph"), default="graph")
-    parser.add_argument("--scheduling-policy", choices=("prefill_first", "interleave"), default="prefill_first")
+    parser.add_argument("--scheduling-policy", choices=("prefill_first", "interleave", "mixed"), default="prefill_first")
     parser.add_argument("--max-num-seqs", type=int, default=2)
     parser.add_argument("--max-num-batched-tokens", type=int, default=512)
     parser.add_argument("--max-model-len", type=int, default=4352)
@@ -309,7 +315,7 @@ def main(argv=None):
     directory.mkdir(parents=True, exist_ok=False)
     root = Path(__file__).resolve().parent
     metadata = {
-        "status": "running", "schema_version": 1, "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "status": "running", "schema_version": 2, "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "arguments": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
         "python": sys.version, "executable": sys.executable, "command": sys.argv,
         "git_commit": command_output(["git", "rev-parse", "HEAD"], root),
@@ -319,7 +325,7 @@ def main(argv=None):
         "sampling": {"temperature": 0.6, "ignore_eos": True},
         "clock_semantics": "perf_counter relative to round start; fixed planned arrivals, actual admission only between steps; outputs observed at step return (upper bound on CPU availability)",
         "timing_scope": "step wall time includes schedule/runner/postprocess, NOT pure GPU; no extra per-step CUDA sync; original runner returns CPU token IDs; no text detokenization",
-        "limitations": "synthetic workload, no server/network; observer overhead included; no p95/p99 inference from few requests; no KV pressure; warmup may not cover all arrival-dependent batch shapes; phase reporting uses original signed-token step API and must change with mixed batches",
+        "limitations": "synthetic workload, no server/network; observer overhead included; no p95/p99 inference from few requests; no KV pressure; warmup may not cover all arrival-dependent batch shapes; phase uses explicit engine counters with signed-token fallback for older engines; mixed policy also skips discarded partial-prefill sampling",
     }
     for name in ("bench_timeline.py", "bench_baseline.py"):
         (directory / name).write_bytes((root / name).read_bytes())

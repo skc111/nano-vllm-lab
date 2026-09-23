@@ -92,6 +92,25 @@ class TimelineTests(unittest.TestCase):
         self.assertEqual(len(partial_steps), 2)
         self.assertEqual([r["output_tokens"] for r in result["requests"]], [3, 1])
 
+    def test_explicit_mixed_counters_override_legacy_positive_sign(self):
+        class CounterEngine(Engine):
+            def step(self):
+                result, signed = super().step()
+                self.last_step_stats = ({'phase':'mixed','prefill_tokens':1,'decode_tokens':1}
+                                        if signed > 0 else {'phase':'decode','prefill_tokens':0,'decode_tokens':-signed})
+                return result, 2 if signed > 0 else signed
+        clock=Clock()
+        result=replay(CounterEngine(clock),self.workload(),lambda n:n,clock=clock.now,sleep=clock.sleep)
+        mixed=[s for s in result['steps'] if s['phase']=='mixed']
+        self.assertTrue(mixed)
+        self.assertTrue(all(s['scheduled_input_tokens']==2 and s['prefill_tokens']==1 and s['decode_tokens']==1 for s in mixed))
+
+    def test_bad_explicit_counters_fail_observer(self):
+        clock=Clock();engine=Engine(clock)
+        engine.last_step_stats={'phase':'mixed','prefill_tokens':999,'decode_tokens':1}
+        with self.assertRaisesRegex(RuntimeError,'counters disagree'):
+            replay(engine,self.workload(),lambda n:n,clock=clock.now,sleep=clock.sleep)
+
     def test_decode_interruption_is_visible(self):
         result = self.replay()
         a = result["requests"][0]

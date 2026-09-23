@@ -33,7 +33,7 @@ def parse_args(argv=None):
     parser.add_argument("--max-model-len", type=int, default=1024)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.85)
     parser.add_argument("--execution", choices=("eager", "graph"), default="eager")
-    parser.add_argument("--scheduling-policy", choices=("prefill_first", "interleave"), default="prefill_first")
+    parser.add_argument("--scheduling-policy", choices=("prefill_first", "interleave", "mixed"), default="prefill_first")
     parser.add_argument("--temperature", type=float, default=0.6)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output-dir", type=Path, help="New directory; never overwrite a run")

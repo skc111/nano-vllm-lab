@@ -19,8 +19,12 @@ class Config:
     scheduling_policy: str = "prefill_first"
 
     def __post_init__(self):
-        if self.scheduling_policy not in ("prefill_first", "interleave"):
-            raise ValueError("scheduling_policy must be 'prefill_first' or 'interleave'")
+        if self.scheduling_policy not in ("prefill_first", "interleave", "mixed"):
+            raise ValueError("scheduling_policy must be 'prefill_first', 'interleave' or 'mixed'")
+        if self.scheduling_policy == "mixed" and self.tensor_parallel_size != 1:
+            raise ValueError("mixed scheduling currently supports a single GPU only")
+        if self.max_num_seqs <= 0 or self.max_num_batched_tokens <= 0:
+            raise ValueError("request and token budgets must be positive")
         assert os.path.isdir(self.model)
         assert self.kvcache_block_size % 256 == 0
         assert 1 <= self.tensor_parallel_size <= 8

@@ -25,6 +25,8 @@ class Scheduler:
         self.waiting.append(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:
+        if self.scheduling_policy == "mixed":
+            return self.schedule_mixed()
         scheduled_seqs = []
         num_batched_tokens = 0
 
@@ -87,19 +89,88 @@ class Scheduler:
         self._last_was_prefill = False
         return scheduled_seqs, False
 
+    def schedule_mixed(self) -> tuple[list[Sequence], bool]:
+        """Decode first, then chunk prefill in the same varlen forward.
+
+        The bool selects the attention execution path (varlen vs decode), NOT
+        the phase of every request. Per-request phase is seq.is_prefill.
+        Full prompt block allocation is intentionally unchanged.
+        """
+        decodes, prefills = [], []
+        remaining = self.max_num_batched_tokens
+        # Under a full decode budget, give waiting prefill one slot/token on
+        # alternate rounds. Rotate decode requests so the same tail cannot starve.
+        reserve = int(bool(self.waiting and self.running and not self._last_was_prefill))
+
+        def take_decode(slots, token_reserve):
+            nonlocal remaining
+            while self.running and len(decodes) < slots and remaining > token_reserve:
+                if (self.waiting and self.waiting[0].block_table
+                        and not self.block_manager.can_append(self.running[0])):
+                    # Let an already allocated partial prefill advance rather
+                    # than put a preempted decode in front of it with no room.
+                    break
+                seq = self.running.popleft()
+                while not self.block_manager.can_append(seq):
+                    if self.running:
+                        self.preempt(self.running.pop())
+                    else:
+                        self.preempt(seq)
+                        break
+                else:
+                    seq.num_scheduled_tokens = 1
+                    seq.is_prefill = False
+                    self.block_manager.may_append(seq)
+                    decodes.append(seq)
+                    remaining -= 1
+
+        take_decode(self.max_num_seqs - reserve, reserve)
+        while self.waiting and remaining and len(decodes) + len(prefills) < self.max_num_seqs:
+            seq = self.waiting[0]
+            if not seq.block_table:
+                cached_blocks = self.block_manager.can_allocate(seq)
+                if cached_blocks < 0:
+                    break
+                self.block_manager.allocate(seq, cached_blocks)
+            seq.is_prefill = True
+            seq.num_scheduled_tokens = min(len(seq) - seq.num_cached_tokens, remaining)
+            assert seq.num_scheduled_tokens > 0
+            remaining -= seq.num_scheduled_tokens
+            prefills.append(seq)
+            if seq.num_cached_tokens + seq.num_scheduled_tokens == len(seq):
+                self.waiting.popleft()
+                seq.status = SequenceStatus.RUNNING
+                # Add only AFTER decode selection, so a new prefill is not
+                # accidentally selected again in the fallback below.
+            else:
+                break
+        if not prefills and reserve:
+            take_decode(self.max_num_seqs, 0)
+        self.running.extend(decodes)
+        self.running.extend(s for s in prefills if s.status == SequenceStatus.RUNNING)
+        selected = decodes + prefills
+        if not selected:
+            raise RuntimeError("mixed scheduler cannot make progress with the current KV capacity")
+        self._last_was_prefill = bool(prefills)
+        return selected, bool(prefills)
+
     def preempt(self, seq: Sequence):
         seq.status = SequenceStatus.WAITING
         seq.is_prefill = True
         self.block_manager.deallocate(seq)
         self.waiting.appendleft(seq)
 
-    def postprocess(self, seqs: list[Sequence], token_ids: list[int], is_prefill: bool):
+    def postprocess(self, seqs: list[Sequence], token_ids: list[int | None], is_prefill: bool):
+        if len(seqs) != len(token_ids):
+            raise ValueError("runner output must preserve one entry per scheduled request")
         for seq, token_id in zip(seqs, token_ids):
             self.block_manager.hash_blocks(seq)
             seq.num_cached_tokens += seq.num_scheduled_tokens
             seq.num_scheduled_tokens = 0
             if is_prefill and seq.num_cached_tokens < seq.num_tokens:
                 continue
+            if token_id is None:
+                raise ValueError("missing sampled token for a completed query")
             seq.append_token(token_id)
             if (not seq.ignore_eos and token_id == self.eos) or seq.num_completion_tokens == seq.max_tokens:
                 seq.status = SequenceStatus.FINISHED
