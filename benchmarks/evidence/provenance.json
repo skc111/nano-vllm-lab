@@ -1,0 +1,126 @@
+{
+  "scope": "Curated per-round numerical extracts, NOT complete raw timelines or an independently accessible raw-data release. Original archives retained locally; checksums identify them, not a public download.",
+  "statistics": "Report uses median across 3 measured repeats after 2 warmups; repeats reuse a fixed trace. Arrival percentiles are computed within each round before medians. No population p99 or confidence intervals.",
+  "model_identity": "Model config/tokenizer metadata hashes and weight sizes were checked within pairs; not full weight hashes or a pinned model revision.",
+  "runs": [
+    {
+      "run_id": "mixed-20260923-195533",
+      "source_commit": "534362fe24242e00f2b05734168464b14d67c29c",
+      "archive_sha256": "946d615f430ff0ac8484579bbe65ce38350f2cadbfc2d22c47c07e9d52911ba9",
+      "gpu": {
+        "name": "NVIDIA GeForce RTX 4090",
+        "total_memory_bytes": 25386352640
+      },
+      "versions": {
+        "torch": "2.7.0a0+7c8ec84dab.nv25.03",
+        "cuda": "12.8",
+        "triton": "3.2.0",
+        "flash_attn": "2.7.3",
+        "transformers": "5.17.0"
+      },
+      "model_dtype": "torch.bfloat16",
+      "sampling": {
+        "temperature": 0.6,
+        "ignore_eos": true
+      },
+      "kv_pools": [
+        121
+      ],
+      "block_size": 256,
+      "warmup": 2,
+      "measured_repeats": 3,
+      "max_num_seqs": 2,
+      "max_num_batched_tokens": 512,
+      "model_metadata_sha256": {
+        "config.json": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "model.safetensors.index.json": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc"
+      }
+    },
+    {
+      "run_id": "kv-20260923-203058",
+      "source_commit": "59f46abe16c762a4898297b3140719ddcccc2a05",
+      "archive_sha256": "fa1ad2610c69f5ce5ee5c457768416d0a440e321993978c61fdb0f0e16898b81",
+      "gpu": {
+        "name": "NVIDIA GeForce RTX 4090",
+        "total_memory_bytes": 25386352640
+      },
+      "versions": {
+        "torch": "2.7.0a0+7c8ec84dab.nv25.03",
+        "cuda": "12.8",
+        "triton": "3.2.0",
+        "flash_attn": "2.7.3",
+        "transformers": "5.17.0"
+      },
+      "model_dtype": "torch.bfloat16",
+      "sampling": {
+        "temperature": 0.6,
+        "ignore_eos": true
+      },
+      "kv_pools": [
+        20,
+        64
+      ],
+      "block_size": 256,
+      "warmup": 2,
+      "measured_repeats": 3,
+      "max_num_seqs": 2,
+      "max_num_batched_tokens": 512,
+      "model_metadata_sha256": {
+        "config.json": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "model.safetensors.index.json": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc"
+      }
+    },
+    {
+      "run_id": "arrivals-20260928-180440",
+      "source_commit": "5e1e6fda14021b6f0f1fcf2e550ce36277d311dc",
+      "archive_sha256": "f01d6db284bfe6e3f0dd1140fac76a01a704919adfca76735c80b019c4d7c5db",
+      "gpu": {
+        "name": "NVIDIA GeForce RTX 4090",
+        "total_memory_bytes": 25386352640
+      },
+      "versions": {
+        "torch": "2.7.0a0+7c8ec84dab.nv25.03",
+        "cuda": "12.8",
+        "triton": "3.2.0",
+        "flash_attn": "2.7.3",
+        "transformers": "5.17.0"
+      },
+      "model_dtype": "torch.bfloat16",
+      "sampling": {
+        "temperature": 0.6,
+        "ignore_eos": true
+      },
+      "kv_pools": [
+        64
+      ],
+      "block_size": 256,
+      "warmup": 2,
+      "measured_repeats": 3,
+      "max_num_seqs": 8,
+      "max_num_batched_tokens": 512,
+      "model_metadata_sha256": {
+        "config.json": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+        "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "tokenizer_config.json": "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
+        "model.safetensors.index.json": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc"
+      }
+    }
+  ],
+  "files_sha256": {
+    "arrival-r2-r4.svg": "e05ca3c42d4ed399bf942a9461b69ef88cdf72d2684c0a8f4b7205683c7444bf",
+    "arrival_rounds.csv": "41c2f935e85214d7e90f64bc9e3fb2254a13a7792905c98b433e01f3698de589",
+    "kv-pressure-timeline.svg": "dc79f264d7c32425f624ac73e86bf503795c3d207e9578928aaadda6dd673006",
+    "kv_rounds.csv": "c6982ac1a50cc64f8595d57095ea4bf2919a56883640fb83caeb08f02a84f529",
+    "mixed-timeline.svg": "2a143307e2f3249a23d3e447c9915713438153b748ca1bba157bda7dfbf52c3e",
+    "mixed_rounds.csv": "a60725e31251b31fc1bfc235880b7ccf91eadb5ed986af4e9fbbc9f093c41aad"
+  },
+  "figures": {
+    "mixed-timeline.svg": "mixed-20260923-195533, measured round 1 for each policy; timestamps from raw steps/tokens, not median statistics.",
+    "kv-pressure-timeline.svg": "kv-20260923-203058, pressure/full and pressure/on_demand measured round 1; per-request allocation/progress explanation uses matching same-version CPU state reconstruction.",
+    "arrival-r2-r4.svg": "arrivals-20260928-180440, per-round statistics then median/min/max across repeats; r1 held out pending diagnosis, not removed from CSV."
+  }
+}

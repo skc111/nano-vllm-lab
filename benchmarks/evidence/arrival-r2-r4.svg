@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="490" viewBox="0 0 1420 490">
+<rect width="1420" height="490" fill="white"/><g font-family="sans-serif" fill="#1d2939">
+<text x="25.0" y="30.0" font-size="23">Provisional comparison: r1 held out for investigation</text>
+<text x="25.0" y="54.0" font-size="13">Points = median of per-round statistics; bars = min/max across repeats (not confidence intervals).</text>
+<text x="65.0" y="94.0" font-size="15">Output token/s</text>
+<path d="M65,365.00 H435" stroke="#ddd"/>
+<text x="20.0" y="369.0" font-size="11">0.0</text>
+<path d="M65,303.75 H435" stroke="#ddd"/>
+<text x="20.0" y="307.8" font-size="11">55.0</text>
+<path d="M65,242.50 H435" stroke="#ddd"/>
+<text x="20.0" y="246.5" font-size="11">109.9</text>
+<path d="M65,181.25 H435" stroke="#ddd"/>
+<text x="20.0" y="185.3" font-size="11">164.9</text>
+<path d="M65,120.00 H435" stroke="#ddd"/>
+<text x="20.0" y="124.0" font-size="11">219.9</text>
+<text x="55.0" y="389.0" font-size="12">2.0</text>
+<text x="425.0" y="389.0" font-size="12">4.0</text>
+<text x="170.0" y="412.0" font-size="13">Offered requests/s</text>
+<path d="M65.00,245.21 V245.18" stroke="#c66a2c" stroke-width="2"/>
+<circle cx="65.00" cy="245.21" r="4" fill="#c66a2c"/>
+<path d="M435.00,164.31 V164.07" stroke="#c66a2c" stroke-width="2"/>
+<circle cx="435.00" cy="164.21" r="4" fill="#c66a2c"/>
+<polyline points="65.00,245.21 435.00,164.21" fill="none" stroke="#c66a2c" stroke-width="2"/>
+<path d="M65.00,245.30 V245.21" stroke="#287fb3" stroke-width="2"/>
+<circle cx="65.00" cy="245.25" r="4" fill="#287fb3"/>
+<path d="M435.00,162.64 V162.52" stroke="#287fb3" stroke-width="2"/>
+<circle cx="435.00" cy="162.58" r="4" fill="#287fb3"/>
+<polyline points="65.00,245.25 435.00,162.58" fill="none" stroke="#287fb3" stroke-width="2"/>
+<path d="M65.00,244.62 V244.58" stroke="#36845b" stroke-width="2"/>
+<circle cx="65.00" cy="244.60" r="4" fill="#36845b"/>
+<path d="M435.00,146.47 V146.25" stroke="#36845b" stroke-width="2"/>
+<circle cx="435.00" cy="146.33" r="4" fill="#36845b"/>
+<polyline points="65.00,244.60 435.00,146.33" fill="none" stroke="#36845b" stroke-width="2"/>
+<text x="530.0" y="94.0" font-size="15">Short-request TTFT p95 (ms)</text>
+<path d="M530,365.00 H900" stroke="#ddd"/>
+<text x="485.0" y="369.0" font-size="11">0.0</text>
+<path d="M530,303.75 H900" stroke="#ddd"/>
+<text x="485.0" y="307.8" font-size="11">118.0</text>
+<path d="M530,242.50 H900" stroke="#ddd"/>
+<text x="485.0" y="246.5" font-size="11">236.1</text>
+<path d="M530,181.25 H900" stroke="#ddd"/>
+<text x="485.0" y="185.2" font-size="11">354.1</text>
+<path d="M530,120.00 H900" stroke="#ddd"/>
+<text x="485.0" y="124.0" font-size="11">472.1</text>
+<text x="520.0" y="389.0" font-size="12">2.0</text>
+<text x="890.0" y="389.0" font-size="12">4.0</text>
+<text x="635.0" y="412.0" font-size="13">Offered requests/s</text>
+<path d="M530.00,333.78 V332.83" stroke="#c66a2c" stroke-width="2"/>
+<circle cx="530.00" cy="333.27" r="4" fill="#c66a2c"/>
+<path d="M900.00,232.24 V230.10" stroke="#c66a2c" stroke-width="2"/>
+<circle cx="900.00" cy="230.38" r="4" fill="#c66a2c"/>
+<polyline points="530.00,333.27 900.00,230.38" fill="none" stroke="#c66a2c" stroke-width="2"/>
+<path d="M530.00,282.21 V280.04" stroke="#287fb3" stroke-width="2"/>
+<circle cx="530.00" cy="281.68" r="4" fill="#287fb3"/>
+<path d="M900.00,147.99 V146.25" stroke="#287fb3" stroke-width="2"/>
+<circle cx="900.00" cy="146.54" r="4" fill="#287fb3"/>
+<polyline points="530.00,281.68 900.00,146.54" fill="none" stroke="#287fb3" stroke-width="2"/>
+<path d="M530.00,332.73 V332.61" stroke="#36845b" stroke-width="2"/>
+<circle cx="530.00" cy="332.69" r="4" fill="#36845b"/>
+<path d="M900.00,181.18 V175.95" stroke="#36845b" stroke-width="2"/>
+<circle cx="900.00" cy="180.60" r="4" fill="#36845b"/>
+<polyline points="530.00,332.69 900.00,180.60" fill="none" stroke="#36845b" stroke-width="2"/>
+<text x="995.0" y="94.0" font-size="15">Short-request max ITL p95 (ms)</text>
+<path d="M995,365.00 H1365" stroke="#ddd"/>
+<text x="950.0" y="369.0" font-size="11">0.0</text>
+<path d="M995,303.75 H1365" stroke="#ddd"/>
+<text x="950.0" y="307.8" font-size="11">388.7</text>
+<path d="M995,242.50 H1365" stroke="#ddd"/>
+<text x="950.0" y="246.5" font-size="11">777.3</text>
+<path d="M995,181.25 H1365" stroke="#ddd"/>
+<text x="950.0" y="185.2" font-size="11">1166.0</text>
+<path d="M995,120.00 H1365" stroke="#ddd"/>
+<text x="950.0" y="124.0" font-size="11">1554.6</text>
+<text x="985.0" y="389.0" font-size="12">2.0</text>
+<text x="1355.0" y="389.0" font-size="12">4.0</text>
+<text x="1100.0" y="412.0" font-size="13">Offered requests/s</text>
+<path d="M995.00,291.07 V290.92" stroke="#c66a2c" stroke-width="2"/>
+<circle cx="995.00" cy="290.96" r="4" fill="#c66a2c"/>
+<path d="M1365.00,151.40 V146.25" stroke="#c66a2c" stroke-width="2"/>
+<circle cx="1365.00" cy="148.98" r="4" fill="#c66a2c"/>
+<polyline points="995.00,290.96 1365.00,148.98" fill="none" stroke="#c66a2c" stroke-width="2"/>
+<path d="M995.00,352.46 V352.40" stroke="#287fb3" stroke-width="2"/>
+<circle cx="995.00" cy="352.40" r="4" fill="#287fb3"/>
+<path d="M1365.00,190.68 V190.18" stroke="#287fb3" stroke-width="2"/>
+<circle cx="1365.00" cy="190.62" r="4" fill="#287fb3"/>
+<polyline points="995.00,352.40 1365.00,190.62" fill="none" stroke="#287fb3" stroke-width="2"/>
+<path d="M995.00,355.43 V355.39" stroke="#36845b" stroke-width="2"/>
+<circle cx="995.00" cy="355.42" r="4" fill="#36845b"/>
+<path d="M1365.00,354.84 V354.59" stroke="#36845b" stroke-width="2"/>
+<circle cx="1365.00" cy="354.70" r="4" fill="#36845b"/>
+<polyline points="995.00,355.42 1365.00,354.70" fill="none" stroke="#36845b" stroke-width="2"/>
+<rect x="40" y="439" width="15" height="15" fill="#c66a2c"/>
+<text x="62.0" y="452.0" font-size="13">prefill_first</text>
+<rect x="260" y="439" width="15" height="15" fill="#287fb3"/>
+<text x="282.0" y="452.0" font-size="13">interleave</text>
+<rect x="480" y="439" width="15" height="15" fill="#36845b"/>
+<text x="502.0" y="452.0" font-size="13">mixed</text>
+<text x="25.0" y="478.0" font-size="12">Sample p95 only; small long-request subsets. Inspect backlog, KV occupancy and logs before attributing changes.</text>
+</g></svg>
